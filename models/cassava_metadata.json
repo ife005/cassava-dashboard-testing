@@ -1,0 +1,12 @@
+{
+  "architecture": "mobilenet_v2",
+  "num_classes": 5,
+  "class_names": [
+    "Cassava Bacterial Blight (CBB)",
+    "Cassava Brown Streak Disease (CBSD)",
+    "Cassava Green Mottle Disease (CGMD)",
+    "Cassava Mosaic Disease (CMD)",
+    "Healthy"
+  ],
+  "img_size": 224
+}
