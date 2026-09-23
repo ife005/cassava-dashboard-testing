@@ -61,7 +61,7 @@ pil_image = Image.open(uploaded_file).convert("RGB")
 col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("🖼️ Uploaded Image")
-    st.image(pil_image, use_column_width=True)
+    st.image(pil_image, use_container_width=True)
 
 with st.spinner("🔬 Analysing..."):
     batch = preprocess_image(pil_image, img_size)
@@ -76,7 +76,7 @@ with st.spinner("🔬 Analysing..."):
 with col_right:
     st.subheader("🔥 Grad-CAM Heatmap")
     if overlay_img is not None:
-        st.image(overlay_img, use_column_width=True)
+        st.image(overlay_img, use_container_width=True)
     else:
         st.info("Grad-CAM unavailable.")
 
