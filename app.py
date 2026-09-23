@@ -13,7 +13,7 @@ from model_utils import (
 )
 from disease_info import DISEASE_INFO
 
-MODEL_PATH = "models/cassava_model.pth"
+MODEL_PATH = "models/cassava_mobilenetv2_final.pth"
 METADATA_PATH = "models/cassava_metadata.json"
 
 st.set_page_config(page_title="Cassava Leaf Disease Detector", page_icon="🌿", layout="wide")
