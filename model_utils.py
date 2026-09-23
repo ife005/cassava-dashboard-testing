@@ -66,15 +66,65 @@ def build_model(architecture: str, num_classes: int):
     return model, target_layers
 
 
-def load_cassava_model(model_path: str, metadata_path: str):
-    with open(metadata_path) as f:
-        meta = json.load(f)
-    model, target_layers = build_model(meta["architecture"], meta["num_classes"])
-    state_dict = torch.load(model_path, map_location=DEVICE)
-    model.load_state_dict(state_dict)
+def load_cassava_model(model_path: str, metadata_path: str = None):
+    # ---- Load checkpoint ----
+    checkpoint = torch.load(model_path, map_location=DEVICE)
+
+    # ---- Unwrap nested checkpoint ----
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    elif isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint
+
+    # ---- Strip 'module.' prefix if present ----
+    state_dict = {
+        (k.replace("module.", "", 1) if k.startswith("module.") else k): v
+        for k, v in state_dict.items()
+    }
+
+    # ---- Auto-detect num_classes from checkpoint ----
+    num_classes = state_dict["classifier.1.weight"].shape[0]
+
+    # ---- Build MobileNetV2 ----
+    model, target_layers = build_model("mobilenet_v2", num_classes)
+
+    # ---- Load weights ----
+    model.load_state_dict(state_dict, strict=True)
     model.to(DEVICE)
     model.eval()
-    return model, meta["class_names"], target_layers, meta["img_size"]
+
+    # ---- Resolve class names + img_size ----
+    class_names = None
+    img_size = IMG_SIZE
+
+    # Try metadata file first
+    if metadata_path:
+        try:
+            with open(metadata_path) as f:
+                meta = json.load(f)
+            class_names = meta.get("class_names")
+            img_size = meta.get("img_size", IMG_SIZE)
+        except FileNotFoundError:
+            pass
+
+    # Fall back to checkpoint's own class_names
+    if class_names is None and isinstance(checkpoint, dict):
+        class_names = checkpoint.get("class_names")
+        img_size = checkpoint.get("input_size", img_size)
+
+    # Last resort
+    if class_names is None:
+        class_names = [
+            "Cassava Bacterial Blight (CBB)",
+            "Cassava Brown Streak Disease (CBSD)",
+            "Cassava Green Mottle Disease (CGMD)",
+            "Cassava Mosaic Disease (CMD)",
+            "Healthy",
+        ]
+
+    return model, class_names, target_layers, img_size
 
 
 def get_transform(img_size: int = IMG_SIZE):
