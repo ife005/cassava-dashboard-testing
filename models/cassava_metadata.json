@@ -1,5 +1,5 @@
 {
-  "architecture": "mobilenet_v2",
+  "architecture": "mobilenet_v3",
   "num_classes": 5,
   "class_names": [
     "Cassava Bacterial Blight (CBB)",
