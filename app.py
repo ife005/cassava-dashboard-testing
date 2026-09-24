@@ -53,14 +53,14 @@ with st.sidebar:
 
 uploaded_file = st.file_uploader("📤 Upload a cassava leaf image", type=["jpg", "jpeg", "png"])
 if uploaded_file is None:
-    st.info("👆 Please upload a cassava leaf image to begin.")
+    st.info(" Please upload a cassava leaf image to begin.")
     st.stop()
 
 pil_image = Image.open(uploaded_file).convert("RGB")
 
 col_left, col_right = st.columns(2)
 with col_left:
-    st.subheader("🖼️ Uploaded Image")
+    st.subheader(" Uploaded Image")
     st.image(pil_image, use_container_width=True)
 
 with st.spinner("🔬 Analysing..."):
@@ -74,14 +74,14 @@ with st.spinner("🔬 Analysing..."):
         st.warning(f"Grad-CAM failed: {e}")
 
 with col_right:
-    st.subheader("🔥 Grad-CAM Heatmap")
+    st.subheader(" Grad-CAM Heatmap")
     if overlay_img is not None:
         st.image(overlay_img, use_container_width=True)
     else:
         st.info("Grad-CAM unavailable.")
 
 st.divider()
-st.subheader("🧪 Prediction Result")
+st.subheader(" Prediction Result")
 c1, c2 = st.columns([2, 1])
 with c1:
     st.markdown(f'<div class="prediction-box"><h3 style="margin:0;color:#1b5e20;">{predicted_class}</h3>'
@@ -106,7 +106,7 @@ with st.expander("📊 Full class probabilities"):
     st.pyplot(fig)
 
 st.divider()
-st.subheader("📖 Disease Information & Management")
+st.subheader(" Disease Information & Management")
 info = DISEASE_INFO.get(predicted_class)
 if info:
     st.markdown(f"**Description:** {info['description']}")
@@ -115,7 +115,7 @@ if info:
         st.markdown("#### 🔍 Symptoms")
         for s in info["symptoms"]: st.markdown(f"- {s}")
     with colB:
-        st.markdown("#### ✅ Recommended Actions")
+        st.markdown("####  Recommended Actions")
         for a in info["advice"]: st.markdown(f"- {a}")
 
 st.caption("⚠️ Decision-support tool only.")
