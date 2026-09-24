@@ -7,3 +7,5 @@ pillow==10.2.0
 opencv-python-headless
 matplotlib==3.8.2
 grad-cam==1.4.8
+libgl1
+libglib2.0-0
