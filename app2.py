@@ -1,4 +1,4 @@
-"""Cassava Leaf Disease Detection Dashboard (PyTorch) — Full Version with PDF + Batch."""
+"""Cassava Leaf Disease Detection Dashboard (PyTorch) — Full Version."""
 
 import os
 import torch
@@ -13,7 +13,6 @@ from model_utils import (
     load_cassava_model, preprocess_image, predict, generate_gradcam,
 )
 from disease_info import DISEASE_INFO
-from report_generator import build_pdf_report
 
 # ============================================================
 #  CONFIG
@@ -48,7 +47,7 @@ st.markdown("""
 
 st.markdown('<div class="main-title">🌿 Cassava Leaf Disease Detector</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="subtitle">Upload, paste, capture, or batch-process cassava leaves to detect diseases with AI</div>',
+    '<div class="subtitle">Upload, paste (Ctrl+V), or capture a cassava leaf image to detect diseases with AI</div>',
     unsafe_allow_html=True,
 )
 
@@ -103,7 +102,7 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.caption("⚠️ Decision-support tool only.")
+    st.caption("⚠️ Decision-support tool only. Always confirm with a local agricultural extension officer.")
 
 # ============================================================
 #  HOW IT WORKS
@@ -111,21 +110,28 @@ with st.sidebar:
 with st.expander("📚 How does this work?"):
     st.markdown(
         """
-        **1. Image preprocessing** — Your image is resized to 224×224 and normalized.
+        **1. Image preprocessing**
+        Your image is resized to 224×224 pixels and normalized before being fed to the model.
 
-        **2. MobileNetV2 classifier** — A lightweight CNN pretrained on ImageNet, fine-tuned for 5 cassava classes.
+        **2. MobileNetV2 classifier**
+        A lightweight CNN pretrained on ImageNet, fine-tuned to recognize 5 cassava leaf classes.
+        It runs efficiently on CPU.
 
-        **3. Softmax output** — Highest probability becomes the prediction.
+        **3. Softmax output**
+        The model outputs a probability for each class. The highest becomes the prediction.
 
-        **4. Grad-CAM heatmap** — Shows which regions influenced the prediction (red = high attention).
+        **4. Grad-CAM heatmap**
+        We visualize **which regions** of the image most influenced the prediction.
+        Warm colours (red) = high attention. Cool colours (blue) = low attention.
+        This helps you verify the model is looking at actual leaf symptoms, not background noise.
         """
     )
 
 # ============================================================
 #  INPUT TABS
 # ============================================================
-tab_upload, tab_samples, tab_paste, tab_camera, tab_batch = st.tabs(
-    ["📤 Upload", "🖼️ Sample Images", "📋 Paste (Ctrl+V)", "📷 Camera", "📦 Batch Mode"]
+tab_upload, tab_samples, tab_paste, tab_camera = st.tabs(
+    ["📤 Upload", "🖼️ Sample Images", "📋 Paste (Ctrl+V)", "📷 Camera"]
 )
 
 # ---------- Tab 1: Upload ----------
@@ -142,6 +148,7 @@ with tab_upload:
 # ---------- Tab 2: Sample images ----------
 with tab_samples:
     st.caption("Don't have an image? Try one of these examples.")
+
     SAMPLE_DIR = "samples"
     SAMPLE_FILES = {
         "CBB": f"{SAMPLE_DIR}/cbb.jpg",
@@ -150,6 +157,7 @@ with tab_samples:
         "CMD": f"{SAMPLE_DIR}/cmd.jpg",
         "Healthy": f"{SAMPLE_DIR}/healthy.jpg",
     }
+
     sample_cols = st.columns(5)
     for col, (name, path) in zip(sample_cols, SAMPLE_FILES.items()):
         with col:
@@ -161,11 +169,16 @@ with tab_samples:
             else:
                 st.info(f"Missing sample: {name}")
 
-# ---------- Tab 3: Paste ----------
+    st.info(
+        "📌 To enable samples, add JPG files to a `samples/` folder in your repo: "
+        "`cbb.jpg`, `cbsd.jpg`, `cgmd.jpg`, `cmd.jpg`, `healthy.jpg`."
+    )
+
+# ---------- Tab 3: Clipboard paste ----------
 with tab_paste:
     st.caption(
         "**Paste an image directly from your clipboard.** "
-        "Take a screenshot or copy an image, then press **Ctrl+V** (Cmd+V on Mac)."
+        "Take a screenshot or copy an image from anywhere, then press **Ctrl+V** (Cmd+V on Mac) below."
     )
     pasted = st.file_uploader(
         "Paste here (Ctrl+V)",
@@ -177,137 +190,34 @@ with tab_paste:
         st.session_state.current_image = Image.open(pasted).convert("RGB")
         st.success("✅ Image pasted from clipboard!")
 
-# ---------- Tab 4: Camera ----------
+# ---------- Tab 4: Live camera capture ----------
 with tab_camera:
     st.caption(
         "**Capture a cassava leaf with your device's camera.** "
         "Works on phones, tablets, and laptops with a webcam."
     )
+
     cam_file = st.camera_input(
         "Point your camera at a cassava leaf",
         key="camera_tab_input",
     )
+
     if cam_file is not None:
         st.session_state.current_image = Image.open(cam_file).convert("RGB")
-        st.success("✅ Photo captured!")
-    st.info("📱 **Tip**: Hold the leaf steady in good lighting. Fill the frame with the affected area.")
+        st.success("✅ Photo captured! Scroll down for the analysis.")
 
-# ---------- Tab 5: Batch Mode ----------
-with tab_batch:
-    st.caption(
-        "**Upload multiple leaf images at once.** "
-        "Great for surveying a whole field — get a summary table of all predictions."
+    st.info(
+        "📱 **Tip for farmers**: On your phone, hold the leaf steady in good lighting. "
+        "Make sure the affected area fills the frame."
     )
-    batch_files = st.file_uploader(
-        "Upload up to 20 images",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True,
-        key="batch_tab",
-    )
-
-    if batch_files:
-        if len(batch_files) > 20:
-            st.warning("⚠️ Limited to first 20 images.")
-            batch_files = batch_files[:20]
-
-        st.success(f"✅ {len(batch_files)} image(s) loaded. Running batch analysis...")
-
-        results = []
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        for i, file in enumerate(batch_files):
-            status_text.text(f"Analysing image {i+1} of {len(batch_files)}: {file.name}")
-            try:
-                img = Image.open(file).convert("RGB")
-                b = preprocess_image(img, img_size)
-                idx, conf, _ = predict(model, b)
-                results.append({
-                    "File": file.name,
-                    "Prediction": class_names[idx],
-                    "Confidence": f"{conf*100:.1f}%",
-                    "_confidence_float": conf,
-                    "_pil": img,
-                })
-            except Exception as e:
-                results.append({
-                    "File": file.name,
-                    "Prediction": f"❌ Error",
-                    "Confidence": "-",
-                    "_confidence_float": 0.0,
-                    "_pil": None,
-                })
-            progress_bar.progress((i + 1) / len(batch_files))
-
-        status_text.text("✅ Batch analysis complete!")
-        progress_bar.empty()
-
-        # ---- Summary table ----
-        st.subheader("📊 Batch Summary")
-
-        # Class distribution
-        from collections import Counter
-        counts = Counter(r["Prediction"] for r in results if r["_pil"] is not None)
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            st.metric("Total images", len(results))
-        with col_b:
-            most_common = counts.most_common(1)
-            if most_common:
-                st.metric("Most common", most_common[0][0].split("(")[0].strip())
-        with col_c:
-            avg_conf = np.mean([r["_confidence_float"] for r in results if r["_pil"]])
-            st.metric("Avg confidence", f"{avg_conf*100:.1f}%")
-
-        # Table of results
-        import pandas as pd
-        df = pd.DataFrame([
-            {"File": r["File"], "Prediction": r["Prediction"], "Confidence": r["Confidence"]}
-            for r in results
-        ])
-        st.dataframe(df, use_container_width=True)
-
-        # ---- CSV download ----
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "📥 Download results as CSV",
-            data=csv,
-            file_name="cassava_batch_results.csv",
-            mime="text/csv",
-        )
-
-        # ---- Image grid ----
-        st.subheader("🖼️ Image Gallery")
-        st.caption("Click any image to zoom.")
-        cols_per_row = 4
-        for row_start in range(0, len(results), cols_per_row):
-            row = results[row_start:row_start + cols_per_row]
-            cols = st.columns(cols_per_row)
-            for col, r in zip(cols, row):
-                with col:
-                    if r["_pil"] is not None:
-                        st.image(r["_pil"], caption=f"{r['File']}\n{r['Prediction']} ({r['Confidence']})", use_container_width=True)
-
-        # ---- Detailed single analysis ----
-        st.divider()
-        st.subheader("🔍 View detailed analysis for one image")
-        selected = st.selectbox(
-            "Choose an image:",
-            options=[r["File"] for r in results if r["_pil"] is not None],
-        )
-        if selected:
-            st.session_state.current_image = next(
-                r["_pil"] for r in results if r["File"] == selected
-            )
-            st.info("⬇️ Scroll down to see the full analysis of this image.")
 
 # ============================================================
-#  SINGLE-IMAGE ANALYSIS
+#  MAIN ANALYSIS
 # ============================================================
 pil_image = st.session_state.current_image
 
 if pil_image is None:
-    st.info("👆 Upload, drag, paste, capture, or batch-process images to begin.")
+    st.info("👆 Upload, drag, paste (Ctrl+V), or capture a photo to begin.")
     st.stop()
 
 st.divider()
@@ -335,7 +245,7 @@ with col_right:
     st.markdown("#### 🔥 Grad-CAM Heatmap")
     if overlay_img is not None:
         st.image(overlay_img, use_container_width=True)
-        st.caption("Warm regions = areas the model focused on.")
+        st.caption("Warm regions = areas the model focused on when making this prediction.")
     else:
         st.info("Grad-CAM unavailable.")
 
@@ -361,15 +271,25 @@ with c2:
 
 st.progress(min(confidence, 1.0))
 
-# Confidence interpretation
+# ---------- Confidence interpretation ----------
 if confidence >= 0.85:
-    st.success(f"**High confidence ({confidence*100:.1f}%)** — Reliable for decision-making.")
+    st.success(
+        f"**High confidence ({confidence*100:.1f}%)** — The model is very sure. "
+        "You can rely on this result for decision-making, but still verify visually."
+    )
 elif confidence >= 0.60:
-    st.warning(f"**Medium confidence ({confidence*100:.1f}%)** — Cross-check with the heatmap.")
+    st.warning(
+        f"**Medium confidence ({confidence*100:.1f}%)** — The model is fairly sure but not certain. "
+        "Cross-check with the Grad-CAM heatmap and consult an extension officer."
+    )
 else:
-    st.error(f"**Low confidence ({confidence*100:.1f}%)** — Try a clearer photo.")
+    st.error(
+        f"**Low confidence ({confidence*100:.1f}%)** — The model is unsure. "
+        "The image may be unclear, contain multiple leaves, or show early-stage symptoms. "
+        "Please try a clearer photo."
+    )
 
-# Probability chart
+# ---------- Probability chart ----------
 with st.expander("📊 Full class probabilities"):
     fig, ax = plt.subplots(figsize=(8, 3))
     y_pos = np.arange(len(class_names))
@@ -384,38 +304,7 @@ with st.expander("📊 Full class probabilities"):
     st.pyplot(fig)
 
 # ============================================================
-#  PDF REPORT DOWNLOAD
-# ============================================================
-st.divider()
-st.subheader("📄 Download Report")
-
-st.caption("Generate a PDF report with the prediction, heatmap, and management advice.")
-
-if st.button("📄 Generate PDF Report", use_container_width=True, type="primary"):
-    with st.spinner("Generating PDF..."):
-        try:
-            pdf_buffer = build_pdf_report(
-                original_image=pil_image,
-                gradcam_image=overlay_img,
-                predicted_class=predicted_class,
-                confidence=confidence,
-                all_probs=all_probs,
-                class_names=class_names,
-                disease_info=DISEASE_INFO.get(predicted_class),
-            )
-            st.download_button(
-                label="⬇️ Click here to download the PDF",
-                data=pdf_buffer,
-                file_name=f"cassava_report_{predicted_class.split('(')[0].strip().replace(' ', '_')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-            st.success("✅ PDF ready! Click the button above to download.")
-        except Exception as e:
-            st.error(f"❌ PDF generation failed: {e}")
-
-# ============================================================
-#  DISEASE INFO
+#  DISEASE INFO & MANAGEMENT
 # ============================================================
 st.divider()
 st.subheader("📖 Disease Information & Management")
@@ -423,6 +312,7 @@ st.subheader("📖 Disease Information & Management")
 info = DISEASE_INFO.get(predicted_class)
 if info:
     st.markdown(f"**Description:** {info['description']}")
+
     colA, colB = st.columns(2)
     with colA:
         st.markdown("#### 🔍 Symptoms")
@@ -433,17 +323,20 @@ if info:
         for a in info["advice"]:
             st.markdown(f"- {a}")
 else:
-    st.info("No additional information available.")
+    st.info("No additional information available for this class.")
 
+# ============================================================
+#  WHAT TO DO NEXT
+# ============================================================
 st.divider()
 st.markdown("### 🚜 What to do next")
 st.markdown(
     """
-    - **Isolate** affected plants to prevent spread.
-    - **Photograph** from multiple angles for records.
-    - **Contact** your local agricultural extension officer.
-    - **Share** this result with neighbouring farmers.
+    - **Isolate** the affected plants if possible to prevent spread.
+    - **Photograph** the leaf and plant from multiple angles for records.
+    - **Contact** your local agricultural extension officer for confirmation.
+    - **Share** this result with neighbouring farmers so they can scout their fields.
     """
 )
 
-st.caption("⚠️ Decision-support tool only.")
+st.caption("⚠️ Decision-support tool only. Not a substitute for professional diagnosis.")
